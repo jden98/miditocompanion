@@ -6,12 +6,16 @@ import mido.backends.rtmidi
 import logging
 import logging.handlers
 
+import configparser
+
+from pathlib import Path
 from SMWinservice import SMWinservice
 
-COMPANION_URL = "http://localhost:8000/press/bank/"
 myLogger = logging.getLogger("MyLogger")
 
+# "http://localhost:8000/press/bank/"
 
+#   Companion url (domain:port)
 class MidiToCompanion(SMWinservice):
     _svc_name_ = "MidiToCompanion"
     _svc_display_name_ = "Midi Notes to Companion GET requests"
@@ -27,7 +31,28 @@ class MidiToCompanion(SMWinservice):
 
     def main(self):
         myLogger.info("in main")
-        with mido.open_input() as inport:
+        # check for MidiToCompanion in get_input_names()
+        # if there, open it, if not, open it virtual.  Log issues.
+        iniFile = "C:\\MidiToCompanion\\MidiToCompanion.ini"
+        myLogger.info(iniFile)
+        config = configparser.ConfigParser()
+        config.read(iniFile)
+        COMPANION_URL = config["DEFAULT"]["COMPANION_URL"] + "/press/bank/"
+
+        portName = next(
+            (x for x in mido.get_input_names() if x.startswith("MidiToCompanion")), None
+        )
+        if portName is None:
+            setVirtual = True
+            portName = "MidiToCompanion"
+            myLogger.info(
+                "MidiToCompanion Port not found.  Trying Virtual (won't work on Windows)."
+            )
+        else:
+            setVirtual = False
+            myLogger.info(f"MidiToCompanion Port: {portName}")
+
+        with mido.open_input(portName, virtual=setVirtual) as inport:
             myLogger.info("port opened")
             while self.isrunning:
                 for message in inport.iter_pending():
@@ -35,7 +60,7 @@ class MidiToCompanion(SMWinservice):
                         page = (message.note // 12) + 1
                         button = (message.note % 12) + 1
                         resp = requests.get(f"{COMPANION_URL}{page}/{button}")
-                time.sleep(0.25)
+                time.sleep(0.1)
 
 
 if __name__ == "__main__":
